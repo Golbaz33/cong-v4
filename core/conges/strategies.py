@@ -60,8 +60,9 @@ class CongeStrategy(ABC):
 class CongeAnnuelStrategy(CongeStrategy):
     """Stratégie pour les congés annuels, calculés en jours ouvrés."""
     def calculate_end_date(self, start_date, days_to_add, holidays_set):
-        if days_to_add <= 0: return start_date.date()
-        temp_date = start_date.date()
+        # La seule différence est la suppression des .date() inutiles
+        if days_to_add <= 0: return start_date 
+        temp_date = start_date
         days_counted = 0
         while days_counted < days_to_add:
             if temp_date.weekday() < 5 and temp_date not in holidays_set:

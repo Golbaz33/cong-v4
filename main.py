@@ -1,5 +1,5 @@
 # Fichier : main.py
-# Version finale avec fermeture propre de la connexion DB.
+# Version finale avec gestion du redémarrage après restauration.
 
 import tkinter as tk
 from tkinter import messagebox
@@ -50,21 +50,33 @@ if __name__ == "__main__":
     logging.basicConfig(filename=LOG_FILE_PATH, level=logging.INFO,
                         format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
 
-    # --- Étape 6 : Initialiser les composants principaux ---
-    db_manager = DatabaseManager(DB_PATH_ABS)
-    if not db_manager.connect():
-        sys.exit(1)
+    # --- Boucle de l'application pour permettre le redémarrage ---
+    restart_app = True
+    while restart_app:
+        restart_app = False # On suppose qu'on ne redémarrera pas
+
+        # --- Étape 6 : Initialiser les composants principaux ---
+        db_manager = DatabaseManager(DB_PATH_ABS)
+        if not db_manager.connect():
+            sys.exit(1)
+            
+        try:
+            db_manager.run_migrations()
+        except Exception as e:
+            logging.critical(f"Échec critique du processus de migration. Arrêt de l'application. Erreur : {e}")
+            sys.exit(1)
+            
+        conge_manager = CongeManager(db_manager, CERTIFICATS_DIR_ABS)
         
-    db_manager.create_db_tables()
-    conge_manager = CongeManager(db_manager, CERTIFICATS_DIR_ABS)
+        # --- Étape 7 : Lancer l'application ---
+        print(f"--- Lancement de {CONFIG['app']['title']} v{CONFIG['app']['version']} ---")
+        app = MainWindow(conge_manager)
+        app.mainloop()
+        
+        # --- Étape 8 : Nettoyage à la fermeture ---
+        if hasattr(app, 'restart_on_close') and app.restart_on_close:
+            restart_app = True # On indique qu'il faut refaire un tour de boucle
+        
+        db_manager.close()
     
-    # --- Étape 7 : Lancer l'application ---
-    print(f"--- Lancement de {CONFIG['app']['title']} v{CONFIG['app']['version']} ---")
-    app = MainWindow(conge_manager)
-    app.mainloop()
-    
-    # --- Étape 8 : Nettoyage à la fermeture ---
-    # AMÉLIORATION : Assure une fermeture propre de la connexion à la base de données
-    # lorsque la fenêtre principale est fermée.
-    db_manager.close()
     print("--- Application fermée, connexion à la base de données terminée. ---")

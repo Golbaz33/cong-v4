@@ -1,11 +1,12 @@
 # Fichier : ui/forms/conge_form.py
-# Version finale avec correction des imports et gestion des erreurs.
+# Version 4.2 : Adaptée au nouveau CongeManager et au système de soldes.
 
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os
 import sqlite3
-import logging # CORRECTION : Import manquant ajouté
+import logging
+from datetime import datetime
 
 # Import des composants de l'architecture
 from core.conges.strategies import (
@@ -36,9 +37,16 @@ class CongeForm(tk.Toplevel):
         self.current_strategy = None
         self.original_cert_path = None
         
+        # --- Récupération de l'agent et de l'année d'exercice ---
         agent_data = self.manager.get_agent_by_id(self.agent_id)
         self.agent_ppr = agent_data.ppr
         agent_name = f"{agent_data.nom} {agent_data.prenom}"
+        self.agent_solde_total = agent_data.get_solde_total_actif()
+
+        # NOTE : Récupération de l'année d'exercice depuis une source fiable
+        # Idéalement, le manager devrait avoir une méthode get_annee_exercice()
+        self.annee_exercice = datetime.now().year
+        # -----------------------------------------------------------
         
         title = f"Modifier un Congé - {agent_name}" if self.is_modification else f"Ajouter un Congé - {agent_name}"
         self.title(title)
@@ -63,6 +71,13 @@ class CongeForm(tk.Toplevel):
     def _create_widgets(self):
         main_frame = ttk.Frame(self, padding=20)
         main_frame.pack(fill="both", expand=True)
+
+        # --- Cadre d'information sur le solde ---
+        solde_info_frame = ttk.Frame(main_frame, relief="groove", padding=5)
+        solde_info_frame.pack(fill="x", pady=(0, 10))
+        ttk.Label(solde_info_frame, text="Solde Annuel Actif Total :", font=('Helvetica', 10, 'bold')).pack(side="left")
+        ttk.Label(solde_info_frame, text=f"{self.agent_solde_total:.1f} jours", font=('Helvetica', 10)).pack(side="left", padx=5)
+
         form_frame = ttk.Frame(main_frame)
         form_frame.pack(fill="x")
         
@@ -201,6 +216,7 @@ class CongeForm(tk.Toplevel):
     
     def _on_validate(self):
         try:
+            # On prépare le dictionnaire de données pour le manager
             form_data = {
                 'agent_id': self.agent_id, 'agent_ppr': self.agent_ppr,
                 'conge_id': self.conge_id, 'type_conge': self.type_var.get(),
@@ -208,8 +224,10 @@ class CongeForm(tk.Toplevel):
                 'jours_pris': int(self.days_var.get()), 'justif': self.justif_entry.get().strip(),
                 'interim_id': self.interim_agents.get(self.interim_var.get()),
                 'cert_path': self.cert_path_var.get(), 'original_cert_path': self.original_cert_path,
+                'annee_exercice': self.annee_exercice # On transmet l'année d'exercice
             }
             
+            # On appelle la nouvelle méthode centralisée du manager
             success = self.manager.handle_conge_submission(form_data, self.is_modification)
             
             if success:
@@ -217,6 +235,7 @@ class CongeForm(tk.Toplevel):
                 self.parent.set_status(message)
                 self.parent.refresh_all(self.agent_id)
                 self.destroy()
+
         except (ValueError, sqlite3.Error) as e:
             messagebox.showerror("Erreur de Validation", str(e), parent=self)
         except Exception as e:
